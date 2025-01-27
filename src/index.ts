@@ -47,11 +47,13 @@ type iGuildMembers = {
 	vocation: 'Elite Knight' | 'Master Sorcerer' | 'Royal Paladin' | 'Elder Druid' | 'Knight' | 'Sorcerer' | 'Paladin' | 'Druid';
 	joined: string;
 	rank_title: string;
+	status: string;
 }
 
 type iGuildMembersSimples = {
 	name: string;
 	level: number;
+	vocation?: number;
 }
 
 const app = new Hono<Env>();
@@ -145,4 +147,74 @@ async function sendDiscordMessageDeath(deathMembers: DeathMember[], DISCORD_API_
 
 }
 
+async function sendDiscordOnlineMessage(newOnline: string[], DISCORD_API_KEY: string) {
+  const CHANNEL_ID = '1332041511247806526';
+  const rest = new REST({ version: '10' }).setToken(DISCORD_API_KEY);
+
+  let messages;
+  try {
+    do {
+	  const query = new URLSearchParams({ limit: '3' });
+	  messages = await rest.get(Routes.channelMessages(CHANNEL_ID), { query });
+	  const messageIds = (messages as any[]).map((message: any) => message.id);
+      await rest.post(Routes.channelBulkDelete(CHANNEL_ID), { body: { messages: messageIds } });
+	} while ((messages as any[]).length >= 2);
+  } catch (error) {
+    console.log(error);
+  }
+
+  await rest.post(Routes.channelMessages(CHANNEL_ID), {
+    body: {
+      content: `\n ### Dominados ~~Eagles~~ Online  (${newOnline.length}):  \n-# Todos os membros da guild Eagle Online`,
+    },
+  });
+
+  const maxMessageLength = 1950;
+  let messageChunk = '';
+
+  for (const player of newOnline) {
+    if ((messageChunk + player).length > maxMessageLength) {
+      await rest.post(Routes.channelMessages(CHANNEL_ID), {
+        body: {
+          content: "```" + messageChunk + "```",
+        },
+      });
+      messageChunk = '';
+    }
+    messageChunk += player;
+  }
+
+  if (messageChunk.length > 0) {
+    await rest.post(Routes.channelMessages(CHANNEL_ID), {
+      body: {
+        content: "```" + messageChunk + "```",
+      },
+    });
+  }
+}
+
+/* =================== ONLINE =================== */
+app.get('/guild/:guildName/online', async (c) => {
+	const guildName = c.req.param('guildName');
+	const { DISCORD_API_KEY} = env(c);
+
+
+
+	const classList = { 'Elite Knight': '🛡️', 'Master Sorcerer': '🔥' , 'Royal Paladin': '🏹' , 'Elder Druid': '🌱', 'Knight': '🛡️', 'Sorcerer': '🔥' , 'Paladin': '🏹' , 'Druid': '🌱' }; 
+
+	const response = await fetch(`https://api.tibiadata.com/v4/guild/${guildName}`);
+	const body = await response.json() as BodyGuild;
+	const guildMembers  = body.guild.members;
+	const onlinePlayers: string [] = []
+	
+	await Promise.all(guildMembers.map(async member => {
+		if(member.status === 'online') {
+			onlinePlayers.push( `\n ${classList[member.vocation]} ${member.name} (${member.level})`);
+		}
+	}));
+
+	await sendDiscordOnlineMessage(onlinePlayers, DISCORD_API_KEY);
+
+	return c.json({ onlinePlayers });
+});
 export default app;
