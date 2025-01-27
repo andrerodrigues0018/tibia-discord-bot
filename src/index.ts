@@ -204,7 +204,7 @@ app.get('/guild/:guildName/online', async (c) => {
 
 	const response = await fetch(`https://api.tibiadata.com/v4/guild/${guildName}`);
 	const body = await response.json() as BodyGuild;
-	const guildMembers  = body.guild.members.sort((a, b) => a.level - b.level);
+	const guildMembers  = body.guild.members.sort((a, b) => b.level - a.level );
 	const onlinePlayers: string [] = []
 	
 	await Promise.all(guildMembers.map(async member => {
